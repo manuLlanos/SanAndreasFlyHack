@@ -3,7 +3,8 @@ External hacks that looks up the game process, keeps the health at 200 and lets 
 b           - toggle on/ff  
 wasd        - move  
 shift/lctrl - go up/down  
-up/down     - increase/decrease flying speed
+up/down     - increase/decrease flying speed  
+F4          - stop process
 
 ## Notes
 
