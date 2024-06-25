@@ -1,3 +1,4 @@
+#include "vector3.h"
 #include <Windows.h>
 #include <iostream>
 #include <TlHelp32.h>
@@ -10,46 +11,13 @@
 const DWORD CAMERA_PITCH_ADDRESS = 0x00B6F248;
 const DWORD CAMERA_ROLL_ADDRESS = 0x00B6F258;
 const DWORD HEALTH_OFFSETS[2] = {0x0076F980, 0x540};
-DWORD SPEED_OFFSETS[] = { 0x00809B28, 0x144, 0x344, 0x6c, 0x134, 0};
+const DWORD SPEED_OFFSET = 0x0076F3B8;
 
 const float JUMP_SPEED = 1.0;
 const float PI = 3.14159265359;
 
-class Vector3 {
-	public:
-		float x;
-		float y;
-		float z;
-
-		Vector3(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {
-		};
-
-		Vector3 operator+(Vector3 const& obj) {
-			Vector3 res;
-			res.x = x + obj.x;
-			res.y = y + obj.y;
-			res.z = z + obj.z;
-			return res;
-		}
-		Vector3 operator-(Vector3 const& obj) {
-			Vector3 res;
-			res.x = x - obj.x;
-			res.y = y - obj.y;
-			res.z = z - obj.z;
-			return res;
-		}
-		Vector3 operator*(float num) {
-			Vector3 res;
-			res.x = x * num;
-			res.y = y * num;
-			res.z = z * num;
-			return res;
-		}
-};
 
 float clamp(float, float, float);
-
-void ReadFinalAddress(HANDLE process, DWORD base_address, DWORD* address, DWORD offsets[], int array_size);
 void WriteSpeed(HANDLE process, DWORD addresses[], Vector3 speed);
 
 DWORD ObtenerPID(const char* name) {
@@ -90,7 +58,15 @@ DWORD ObtenerModulo(const char* name, DWORD pid) {
 int main(int argc, char** argv)
 {
 	DWORD pid = ObtenerPID("gta_sa.exe");
+	if (!pid) {
+		printf_s("Couldn't find process ID\n");
+		return 0;
+	}
 	DWORD base_addr = ObtenerModulo("gta_sa.exe", pid);
+	if (!base_addr) {
+		printf_s("Couldn't get base address\n");
+		return 0;
+	}
 	printf_s("PID: %d\nBase Addr: %x\n", pid, base_addr);
 
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, TRUE, pid);
@@ -107,6 +83,11 @@ int main(int argc, char** argv)
 	float modifier = 1.0;
 	DWORD speed_address1;
 	DWORD SPEED_ADDRESSES[] = { 0, 0, 0 };
+	//read speed addresses
+	ReadProcessMemory(hProcess, (LPCVOID)(base_addr + SPEED_OFFSET), &speed_address1, sizeof(DWORD), NULL);
+	SPEED_ADDRESSES[0] = speed_address1 + 0x44;
+	SPEED_ADDRESSES[1] = speed_address1 + 0x48;
+	SPEED_ADDRESSES[2] = speed_address1 + 0x4C;
 	
 	bool fly_enabled = false;
 
@@ -115,7 +96,6 @@ int main(int argc, char** argv)
 	DWORD health_address1;
 	
 	while (true) {
-		Sleep(50);
 		ReadProcessMemory(hProcess, (LPCVOID)(CAMERA_ROLL_ADDRESS), &camera_roll, sizeof(float), NULL);
 		ReadProcessMemory(hProcess, (LPCVOID)(CAMERA_PITCH_ADDRESS), &camera_pitch, sizeof(float), NULL);
 
@@ -149,21 +129,8 @@ int main(int argc, char** argv)
 
 		modifier = clamp(modifier, 0.1, 5.0);
 
-		//read speed addresses
-		ReadFinalAddress(hProcess, base_addr, &speed_address1, SPEED_OFFSETS, std::size(SPEED_OFFSETS));
-		SPEED_ADDRESSES[0] = speed_address1 + 0x44;
-		SPEED_ADDRESSES[1] = speed_address1 + 0x48;
-		SPEED_ADDRESSES[2] = speed_address1 + 0x4C;
-		//ReadProcessMemory(hProcess, (LPVOID)(SPEED_ADDRESSES[0]), &speed.x, sizeof(float), NULL);
-		//ReadProcessMemory(hProcess, (LPVOID)(SPEED_ADDRESSES[1]), &speed.y, sizeof(float), NULL);
-		//ReadProcessMemory(hProcess, (LPVOID)(SPEED_ADDRESSES[2]), &speed.z, sizeof(float), NULL);
-
 		speed = Vector3();
 		
-
-		//printf_s("Pitch: %f\tRoll: %f\n", camera_pitch, camera_roll);
-		//printf_s("Health: %f\n", health);
-
 
 		//higher order bit is 1 when pressed
 		if (GetAsyncKeyState(VK_SHIFT) && 0x8000) {
@@ -195,15 +162,6 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-void ReadFinalAddress(HANDLE process, DWORD base_address, DWORD* address, DWORD offsets[], int array_size)
-{
-	DWORD temp_address;
-	ReadProcessMemory(process, (LPCVOID)(base_address + offsets[0]), &temp_address, sizeof(DWORD), NULL);
-	for (int i = 1; i < array_size; i++) {
-		ReadProcessMemory(process, (LPCVOID)(temp_address + offsets[i]), &temp_address, sizeof(DWORD), NULL);
-	}
-	*address = temp_address;
-}
 
 void WriteSpeed(HANDLE hProcess, DWORD addresses[], Vector3 speed)
 {
